@@ -1,0 +1,60 @@
+---
+- name: Instalacao Basica
+  hosts: all
+#  hosts: 10.0.252.182
+#  order: sorted
+#  remote_user: root
+  tasks:
+  - name: Instala Chronyd
+    yum:
+      name: chrony
+      state: latest
+  - name: Instala SSSD
+    yum:
+      name: sssd
+      state: latest
+  - name: Insere NTP
+    lineinfile:
+      path: /etc/chrony.conf
+      line: 'server ntp.pgj.rj.gov.br iburst'
+  - name: Delete NTP obsoleto
+    lineinfile:
+      path: /etc/chrony.conf
+      regexp: '^server\s[0-3]'
+      state: absent
+  - name: Habilitando NTP
+    shell: "timedatectl set-ntp true"
+    become: true
+  - name: Restartando o Chronyd
+    service:
+      name: chronyd
+      state: restarted
+  - name: Configura SSSD Autenticacao LDAP
+    copy:
+      src: /etc/ansible/custom/basico/sssd.conf
+      dest: /etc/sssd/conf.d/sssd.conf
+      mode: 600
+  - name: Habilitando servico SSSD
+    service:
+      name: sssd.service
+      enabled: yes
+  - name: Iniciando servico SSSD
+    service:
+      name: sssd.service
+      state: started
+  - name: Dando acesso a GOLINUX
+    command: cp -f /etc/sudoers /etc/sudoers.tmp
+  - command: cp -f /etc/sudoers /etc/sudoers.bak
+  - lineinfile:
+      path: /etc/sudoers.tmp
+      state: present
+      line: '%go.linux        ALL=(ALL)      NOPASSWD: ALL'
+  - lineinfile:
+      path: /etc/sudoers.tmp
+      state: present
+      line: '%go.infra        ALL=(ALL)      NOPASSWD: ALL'
+  - shell: visudo -q -c -f /etc/sudoers.tmp && cp -f /etc/sudoers.tmp /etc/sudoers
+  - shell: authconfig --enablesssd --enablesssdauth --enablelocauthorize --enableldap --enableldapauth --ldapserver=ldap://p-ldaplx.pgj.rj.gov.br:389 --ldapbasedn="dc=pgj,dc=rj,dc=gov,dc=br" --enableldaptls --ldaploadcacert=http://p-ldaplx.pgj.rj.gov.br/cert/cacert.pem --enablemkhomedir --enablesysnetauth --update
+  - service:
+      name: sssd.service
+      state: restarted
